@@ -34,6 +34,18 @@ public:
     return !atom.empty();
   }
 
+  bool isBadExpr() const {
+    return list.size() > 0 && list[0].isAtom() && list[0].atom == "badexpr";
+  }
+
+  Expr tail() const {
+    Expr ret;
+    for (int i = 1; i < list.size(); ++i) {
+      ret.list.push_back(list[i]);
+    }
+    return ret;
+  }
+
   void add(Expr e) {
     list.push_back(e);
   }
@@ -75,10 +87,12 @@ Expr parse(std::string code) {
   size_t i = 0;
   while (i < code.size()) {
     char ch = code[i++];
+
+    //TODO: support quoted strings
     if (isspace(ch) || ch == '(' || ch == ')') {
       if (!atom.str().empty()) {
         if (stk.empty()) {
-          return parse("(error " + failedatpos(i-1) + ")");
+          return parse("(badexpr " + failedatpos(i-1) + ")");
         }
         //std::cout<<"adding atom: " << atom.str() << std::endl;
         stk.top().add(atom.str());
@@ -105,25 +119,25 @@ Expr parse(std::string code) {
   }
 
   if (i < code.size()) {
-    return parse("(error " + failedatpos(i) + ")");
+    return parse("(badexpr " + failedatpos(i) + ")");
   }
   if (!stk.empty()) {
-    return parse("(error extra-brackets?)");
+    return parse("(badexpr extra-brackets?)");
   }
   if (res.list.size() > 1) {
-    return parse("(error multiple-atoms)");
+    return parse("(badexpr multiple-atoms)");
   }
   res = res.list.size() > 0 ? res.list[0] : Expr();
   return res;
 }
 
-/*
-static constexpr Expr CONST_TRUE = parse("#t");
-static constexpr Expr CONST_FALSE = parse("#f");
+static const Expr CONST_TRUE = parse("#t");
+static const Expr CONST_FALSE = parse("#f");
 
 class LispFunc {
 public:
   virtual Expr apply(Expr e) = 0;
+  virtual ~LispFunc() {}
 };
 
 // (atom? abc) => #t
@@ -132,12 +146,24 @@ class LispFunc_isAtom : public LispFunc {
 public:
   Expr apply(Expr e) {
     if (e.list.size() < 2) {
-      return parse("(error \"not enough args for atom?\")");
+      return parse("(badexpr \"not enough args for atom?\")");
     }
     if (e.list.size() > 2) {
-      return parse("(error \"too many args for atom?\")");
+      return parse("(badexpr \"too many args for atom?\")");
     }
     return e.list[1].isAtom() ? CONST_TRUE : CONST_FALSE;
+  }
+
+  ~LispFunc_isAtom() {}
+};
+
+class LispFunc_quote : public LispFunc {
+public:
+  Expr apply(Expr e) {
+    if (e.list.size() != 2) {
+      return parse("(badexpr \"bad-argnum-for-quote");
+    }
+    return e.tail().list[0];
   }
 };
 
@@ -145,6 +171,7 @@ std::map<std::string, std::unique_ptr<LispFunc> > ENV;
 
 void prepareEnv() {
   ENV["atom?"].reset(new LispFunc_isAtom());
+  ENV["quote"].reset(new LispFunc_quote());
 }
 
 Expr eval(Expr e) {
@@ -152,27 +179,35 @@ Expr eval(Expr e) {
     return e;
   }
   int n = e.list.size();
-  for (int i = 0; i < n; ++i) {
-    e.list[i] = eval(e.list[i]);
-  }
-  if (e.list[0].isAtom()) {
-    auto fnIter = ENV.find(e.list[0]);
-    if (fnIter != ENV.end()) {
-      return fnIter.apply(e);
+  if (e.list[0].atom != "quote") {
+    for (int i = 0; i < n; ++i) {
+      Expr val = eval(e.list[i]);
+      if (val.isBadExpr()) {
+        return val;
+      }
+      e.list[i] = val;
     }
-    std::cout << "ERROR: unkonwn operator: " << e.list[0].atom;
-    return parse("(error, \"unknown operator\")");
   }
+
+  if (e.list[0].isAtom()) {
+    auto fnIter = ENV.find(e.list[0].atom);
+    if (fnIter != ENV.end()) {
+      return fnIter->second->apply(e);
+    }
+    //std::cout << "ERROR: unkonwn operator: " << e.list[0].atom << std::endl;
+    return parse("(badexpr \"unknown-operator\")");
+  }
+  return e;
 }
-*/
 
 int main() {
-  //prepareEnv();
+  prepareEnv();
   std::string code;
   while (std::getline(std::cin, code)) {
     Expr e = parse(code);
-    std::cout << e.toStr() << std::endl;
-    //Expr val = eval(e);
+    std::cout << "parsed: " << e.toStr() << std::endl;
+    Expr val = eval(e);
+    std::cout << "evaled: " << val.toStr() << std::endl;
   }
   return 0;
 }
