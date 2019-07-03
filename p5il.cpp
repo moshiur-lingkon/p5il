@@ -5,20 +5,39 @@
 #include <iostream>
 #include <sstream>
 #include <map>
+#include <memory>
 
 class Expr {
 public:
   std::string atom;
   std::vector<Expr> list;
-  Expr() {}
+
+  Expr() : atom(), list() {
+  }
+
   Expr(std::string s) : atom(s), list() {
   }
+
+  Expr& operator = (const Expr& other) {
+    std::string tmpStr = other.atom;
+    atom = tmpStr;
+    std::vector<Expr> tmpVec = other.list;
+    list = tmpVec;
+    return *this;
+  }
+
+  Expr(const Expr& other) {
+    *this = other;
+  }
+
   bool isAtom() const {
     return !atom.empty();
   }
+
   void add(Expr e) {
     list.push_back(e);
   }
+
   void add(std::string s) {
     list.push_back(Expr(s));
   }
@@ -42,68 +61,66 @@ public:
   }
 };
 
-struct Status {
-  bool success;
-  std::string msg;
-};
-
 std::string failedatpos(int i) {
   std::stringstream ss;
-  ss << "failed at pos: " << i;
+  ss << "failed-at-pos:" << i;
   return ss.str();
 }
 
-Status parse(std::string code, Expr& res) {
+Expr parse(std::string code) {
+  Expr res;
   code = "(" + code + ")"; // this makes it easy to handle atoms
   std::stack<Expr> stk;
-  std::string atom = "";
+  std::stringstream atom;
   size_t i = 0;
   while (i < code.size()) {
     char ch = code[i++];
     if (isspace(ch) || ch == '(' || ch == ')') {
-      if (!atom.empty()) {
+      if (!atom.str().empty()) {
         if (stk.empty()) {
-          std::cout << "haha 1\n";
-          return {false, failedatpos(i)};
+          return parse("(error " + failedatpos(i-1) + ")");
         }
-        stk.top().add(atom);
-        atom = "";
+        //std::cout<<"adding atom: " << atom.str() << std::endl;
+        stk.top().add(atom.str());
+        atom.str("");
       }
     }
     if (ch == '(') {
       stk.push(Expr()); // start a new expr
+      //std::cout<<"starting new expr\n";
     } else if (ch == ')') {
-      Expr e = stk.top();
+      Expr e(stk.top());
       stk.pop();
       if (stk.empty()) {
+        //std::cout<<"end\n";
         res = e;
         break;
       } else {
+        //std::cout<<"putting under parent: " << stk.top().toStr() << " -> " << e.toStr() << std::endl;
         stk.top().add(e);
       }
     } else if (!isspace(ch)) {
-      atom.push_back(ch);
+      atom << ch;
     }
   }
 
-  while (i < code.size() && isspace(code[i])) { // trailing space
-    ++i;
-  }
   if (i < code.size()) {
-          std::cout << "haha 2\n";
-    return {false, failedatpos(i)};
+    return parse("(error " + failedatpos(i) + ")");
   }
   if (!stk.empty()) {
-    return {false, "extra brackets?"};
+    return parse("(error extra-brackets?)");
   }
   if (res.list.size() > 1) {
-    return {false, "multiple atoms"};
+    return parse("(error multiple-atoms)");
   }
-  res = res.list[0];
-  return {true, "parsed successfully"};
+  res = res.list.size() > 0 ? res.list[0] : Expr();
+  return res;
 }
 
 /*
+static constexpr Expr CONST_TRUE = parse("#t");
+static constexpr Expr CONST_FALSE = parse("#f");
+
 class LispFunc {
 public:
   virtual Expr apply(Expr e) = 0;
@@ -120,14 +137,14 @@ public:
     if (e.list.size() > 2) {
       return parse("(error \"too many args for atom?\")");
     }
-    return e.list[1].isEmpty();
+    return e.list[1].isAtom() ? CONST_TRUE : CONST_FALSE;
   }
 };
 
 std::map<std::string, std::unique_ptr<LispFunc> > ENV;
 
 void prepareEnv() {
-  ENV["atom?"] = new LispFunc_isAtom()
+  ENV["atom?"].reset(new LispFunc_isAtom());
 }
 
 Expr eval(Expr e) {
@@ -150,11 +167,10 @@ Expr eval(Expr e) {
 */
 
 int main() {
+  //prepareEnv();
   std::string code;
   while (std::getline(std::cin, code)) {
-    Expr e;
-    Status s = parse(code, e);
-    std::cout << s.success << ", " << s.msg << std::endl;
+    Expr e = parse(code);
     std::cout << e.toStr() << std::endl;
     //Expr val = eval(e);
   }
