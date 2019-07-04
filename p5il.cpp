@@ -3,6 +3,7 @@
 #include <stack>
 #include <vector>
 #include <iostream>
+#include <algorithm>
 #include <sstream>
 #include <map>
 #include <memory>
@@ -145,13 +146,10 @@ public:
 class LispFunc_isAtom : public LispFunc {
 public:
   Expr apply(Expr e) {
-    if (e.list.size() < 2) {
-      return parse("(badexpr \"not enough args for atom?\")");
+    if (e.list.size() != 1) {
+      return parse("(badexpr \"bad-argnum-for-atom?\")");
     }
-    if (e.list.size() > 2) {
-      return parse("(badexpr \"too many args for atom?\")");
-    }
-    return e.list[1].isAtom() ? CONST_TRUE : CONST_FALSE;
+    return e.list[0].isAtom() ? CONST_TRUE : CONST_FALSE;
   }
 
   ~LispFunc_isAtom() {}
@@ -160,10 +158,21 @@ public:
 class LispFunc_quote : public LispFunc {
 public:
   Expr apply(Expr e) {
-    if (e.list.size() != 2) {
+    if (e.list.size() != 1) {
       return parse("(badexpr \"bad-argnum-for-quote");
     }
-    return e.tail().list[0];
+    return e.list[0];
+  }
+};
+
+class LispFunc_addNum : public LispFunc {
+public:
+  Expr apply(Expr e) {
+    Expr ret;
+    ret.atom = std::to_string(
+        std::atoi(e.list[0].atom.c_str()) +
+        std::atoi(e.list[1].atom.c_str()) );
+    return ret;
   }
 };
 
@@ -172,6 +181,7 @@ std::map<std::string, std::unique_ptr<LispFunc> > ENV;
 void prepareEnv() {
   ENV["atom?"].reset(new LispFunc_isAtom());
   ENV["quote"].reset(new LispFunc_quote());
+  ENV["+"].reset(new LispFunc_addNum());
 }
 
 Expr eval(Expr e) {
@@ -179,6 +189,9 @@ Expr eval(Expr e) {
     return e;
   }
   int n = e.list.size();
+  if (n == 0) { // empty list
+    return e;
+  }
   if (e.list[0].atom != "quote") {
     for (int i = 0; i < n; ++i) {
       Expr val = eval(e.list[i]);
@@ -192,7 +205,7 @@ Expr eval(Expr e) {
   if (e.list[0].isAtom()) {
     auto fnIter = ENV.find(e.list[0].atom);
     if (fnIter != ENV.end()) {
-      return fnIter->second->apply(e);
+      return fnIter->second->apply(e.tail());
     }
     //std::cout << "ERROR: unkonwn operator: " << e.list[0].atom << std::endl;
     return parse("(badexpr \"unknown-operator\")");
