@@ -248,8 +248,11 @@ public:
   }
 };
 
-std::map<std::string, std::unique_ptr<LispFunc> > ENV;
-std::set<std::string> nonprimitive;
+struct {
+  std::map<std::string, std::unique_ptr<LispFunc> > funcs;
+  std::map<std::string, Expr> defs;
+} ENV;
+
 Expr eval(Expr);
 
 class LF_defReplacer : public LispFunc {
@@ -262,15 +265,20 @@ public:
   }
 };
 
-#define ADD_FUNC(X,CLS) {ENV[X].reset(new CLS());}
+#define ADD_FUNC(X,CLS) {ENV.funcs[X].reset(new CLS());}
 
-void prepareEnv() {
+void loadPrimitives() {
   ADD_FUNC("atom?", LF_isAtom);
   ADD_FUNC("quote", LF_quote);
   ADD_FUNC("eq?", LF_equal);
   ADD_FUNC("+", LF_addNum);
   ADD_FUNC("*", LF_mulNum);
   ADD_FUNC("not", LF_not);
+  // special:
+  // "if"
+  // "def"
+  // "quote"
+  // "lambda"
 }
 
 Expr replace(std::map<std::string, Expr> vals, Expr e) {
@@ -296,13 +304,11 @@ bool isLambda(Expr e) {
 }
 
 Expr eval(Expr e) {
-std::cout<<"::: " << e.toStr()<<"\n";
+  std::cout<<"::: " << e.toStr()<<"\n";
   if (e.isAtom()) {
-    if (nonprimitive.count(e.atom) > 0) {
-      auto it = ENV.find(e.atom);
-      if (it != ENV.end()) {
-        return it->second->apply(Expr());
-      }
+    auto it = ENV.defs.find(e.atom);
+    if (it != ENV.defs.end()) {
+      return it->second;
     }
     return e;
   }
@@ -328,8 +334,7 @@ std::cout<<"::: " << e.toStr()<<"\n";
     if (!e.list[1].isAtom()) {
       return parse("(badexpr def-arg-should-be-atom)");
     }
-    ENV[e.list[1].atom].reset(new LF_defReplacer(eval(e.list[2])));
-    nonprimitive.insert(e.list[1].atom);
+    ENV.defs[e.list[1].atom] = eval(e.list[2]);
     return Expr();
   }
   if (isLambda(e)) {
@@ -366,26 +371,30 @@ std::cout<<"::: " << e.toStr()<<"\n";
   }
   std::cout <<"}}" << e.toStr() << "\n";
   if (e.list[0].isAtom()) {
-    auto fnIter = ENV.find(e.list[0].atom);
-    if (fnIter != ENV.end()) {
+    auto fnIter = ENV.funcs.find(e.list[0].atom);
+    if (fnIter != ENV.funcs.end()) {
       return fnIter->second->apply(e.tail());
     }
     //std::cout << "ERROR: unkonwn operator: " << e.list[0].atom << std::endl;
-    return parse("(badexpr unknown-operator " + e.list[0].atom +")");
+    return parse("(badexpr unknown-operator-" + e.list[0].atom +")");
   }
   return e;
 }
 
 void printEnv() {
-  std::cout << "ENV: ";
-  for (auto it = ENV.begin(); it != ENV.end(); ++it) {
+  std::cout << "ENV: funcs: {";
+  for (auto it = ENV.funcs.begin(); it != ENV.funcs.end(); ++it) {
     std::cout << it->first << ", ";
   }
-  std::cout << "\n";
+  std::cout << "} defs: {";
+  for (auto it = ENV.defs.begin(); it != ENV.defs.end(); ++it) {
+    std::cout << it->first << ", ";
+  }
+  std::cout << "}\n";
 }
 
 int main() {
-  prepareEnv();
+  loadPrimitives();
   std::string code;
   while (true) {
     std::cout << ">>> ";
