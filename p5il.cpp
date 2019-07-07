@@ -175,6 +175,20 @@ public:
   virtual ~LispFunc() {}
 };
 
+class LF_head : public LispFunc {
+public:
+  Expr apply(Expr e) {
+    return e.head();
+  }
+};
+
+class LF_tail : public LispFunc {
+public:
+  Expr apply(Expr e) {
+    return e.tail();
+  }
+};
+
 // (atom? abc) => #t
 // (atom? (a b)) => $f
 class LF_isAtom : public LispFunc {
@@ -234,6 +248,29 @@ public:
   }
 };
 
+class LF_or : public LispFunc {
+public:
+  Expr apply(Expr e) {
+    for (size_t i = 0; i < e.size(); ++i) {
+      if (e.list[i] == CONST_TRUE) {
+        return CONST_TRUE;
+      }
+    }
+    return CONST_FALSE;
+  }
+};
+
+class LF_and : public LispFunc {
+public:
+  Expr apply(Expr e) {
+    for (size_t i = 0; i < e.size(); ++i) {
+      if (e.list[i] == CONST_FALSE) {
+        return CONST_FALSE;
+      }
+    }
+    return CONST_TRUE;
+  }
+};
 
 class LF_not : public LispFunc {
 public:
@@ -270,7 +307,13 @@ public:
 void loadPrimitives() {
   ADD_FUNC("atom?", LF_isAtom);
   ADD_FUNC("quote", LF_quote);
+  ADD_FUNC("head", LF_head);
+  ADD_FUNC("tail", LF_tail);
+
   ADD_FUNC("eq?", LF_equal);
+  ADD_FUNC("or", LF_or);
+  ADD_FUNC("and", LF_and);
+  ADD_FUNC("not", LF_not);
   ADD_FUNC("+", LF_addNum);
   ADD_FUNC("*", LF_mulNum);
   ADD_FUNC("not", LF_not);

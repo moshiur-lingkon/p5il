@@ -1,0 +1,11 @@
+(+ 1 2)
+(def fib (lambda (n) (if (or (eq? n 0) (eq? n 1)) 1 (+ (fib (+ n -1)) (fib (+ n -2))))))
+(fib 0)
+(fib 1)
+(fib 2)
+(fib 3)
+(fib 4)
+(def fn (lambda (name params expr) (def name (lambda params expr))))
+(fn add (a b) (+ a b))
+(add 100 200)
+exit
