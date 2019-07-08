@@ -59,7 +59,7 @@ public:
   Expr tail() const {
     Expr ret;
     for (int i = 1; i < list.size(); ++i) {
-      ret.list.push_back(list[i]);
+      ret.add(list[i]);
     }
     return ret;
   }
@@ -168,6 +168,7 @@ Expr parse(std::string code) {
 
 static const Expr CONST_TRUE = parse("#t");
 static const Expr CONST_FALSE = parse("#f");
+static const Expr EXIT_FUNC = parse("(exit)");
 
 class LispFunc {
 public:
@@ -175,17 +176,48 @@ public:
   virtual ~LispFunc() {}
 };
 
+class LF_cons : public LispFunc {
+public:
+  Expr apply(Expr e) {
+    if (e.size() != 2) {
+      return parse("(badexpr bad-argnum-for-cons)");
+    }
+    Expr ret;
+    ret.add(e.list[0]);
+    if (e.list[1].isAtom()) {
+      ret.add(e.list[1].atom);
+    } else {
+      for (auto elem : e.list[1].list) {
+        ret.add(elem);
+      }
+    }
+    return ret;
+  }
+};
+
 class LF_head : public LispFunc {
 public:
   Expr apply(Expr e) {
-    return e.head();
+    if (e.size() == 0) {
+      return parse("(badexpr bad-argnum-for-head)");
+    }
+    if (e.list[0].isAtom()) {
+      return parse("(badexpr atom-has-no-head)");
+    }
+    return e.list[0].head();
   }
 };
 
 class LF_tail : public LispFunc {
 public:
   Expr apply(Expr e) {
-    return e.tail();
+    if (e.size() == 0) {
+      return parse("(badexpr bad-argnum-for-tail)");
+    }
+    if (e.list[0].isAtom()) {
+      return parse("(badexpr atom-has-no-tail)");
+    }
+    return e.list[0].tail();
   }
 };
 
@@ -201,16 +233,6 @@ public:
   }
 
   ~LF_isAtom() {}
-};
-
-class LF_quote : public LispFunc {
-public:
-  Expr apply(Expr e) {
-    if (e.list.size() != 1) {
-      return parse("(badexpr bad-argnum-for-quote)");
-    }
-    return e.list[0];
-  }
 };
 
 class LF_addNum : public LispFunc {
@@ -306,9 +328,9 @@ public:
 
 void loadPrimitives() {
   ADD_FUNC("atom?", LF_isAtom);
-  ADD_FUNC("quote", LF_quote);
   ADD_FUNC("head", LF_head);
   ADD_FUNC("tail", LF_tail);
+  ADD_FUNC("cons", LF_cons);
 
   ADD_FUNC("eq?", LF_equal);
   ADD_FUNC("or", LF_or);
@@ -342,12 +364,12 @@ Expr replace(std::map<std::string, Expr> vals, Expr e) {
 }
 
 bool isLambda(Expr e) {
-  //std::cout<<e.list[0].toStr()<<std::endl;
-  return !e.isAtom() && e.size() == 3 && e.list[0].atom == "lambda" && !e.list[1].isAtom();
+  return !e.isAtom() && e.size() == 3 &&
+    (e.list[0].atom == "lambda" || e.list[0].atom == "\\") && !e.list[1].isAtom();
 }
 
 Expr eval(Expr e) {
-  std::cout<<"::: " << e.toStr()<<"\n";
+  //std::cout<<"=> " << e.toStr()<<"\n";
   if (e.isAtom()) {
     auto it = ENV.defs.find(e.atom);
     if (it != ENV.defs.end()) {
@@ -364,7 +386,7 @@ Expr eval(Expr e) {
       return parse("(badexpr bad-argnum-for-if)");
     }
     Expr condition = eval(e.list[1]);
-    if (condition.atom == "#t") {
+    if (condition == CONST_TRUE) {
       return eval(e.list[2]);
     } else {
       return eval(e.list[3]);
@@ -377,51 +399,45 @@ Expr eval(Expr e) {
     if (!e.list[1].isAtom()) {
       return parse("(badexpr def-arg-should-be-atom)");
     }
-    ENV.defs[e.list[1].atom] = eval(e.list[2]);
+    ENV.defs[e.list[1].atom] = e.list[2];
     return Expr();
+  }
+  if (e.list[0].atom == "quote") {
+    if (e.size() != 2) {
+      return parse("(badexpr bad-argnum-for-quote");
+    }
+    return e.list[1];
   }
   if (isLambda(e)) {
     return e;
   }
-  if (e.list[0].atom != "quote") {
-    for (int i = 0; i < n; ++i) {
-      Expr val = eval(e.list[i]);
-      if (val.isBadExpr()) {
-        return val;
-      }
-      e.list[i] = val;
-    }
-  }
+  e.list[0] = eval(e.list[0]);
   if (isLambda(e.list[0])) {
-    std::cout<<"isLambda!"<<std::endl;
     Expr params = e.list[0].list[1];
     Expr args = e.tail();
     Expr expr = e.list[0].list[2];
-    Expr args2;
-    for (int i = 0; i < args.size(); ++i) {
-      args2.add(eval(args.list[i]));
-    }
-    if (params.size() != args2.size()) {
-      std::cout<<"WTF!!! " << params.size() << ", " << args2.size() << "\n";
+    if (params.size() != args.size()) {
+      return parse("(badexpr params-size-args-size-mismatch)");
     }
     std::map<std::string, Expr> vals;
     for (int i = 0; i < params.size(); ++i) {
-      vals[params.list[i].atom] = args2.list[i];
-      //vals.insert(std::make_pair(params.list[i].atom, args2.list[i]));
+      vals[params.list[i].atom] = args.list[i];
     }
     Expr e2 = replace(vals, expr);
     return eval(e2);
   }
-  std::cout <<"}}" << e.toStr() << "\n";
   if (e.list[0].isAtom()) {
+    for (size_t i = 1; i < e.list.size(); ++i) {
+      e.list[i] = eval(e.list[i]);
+    }
     auto fnIter = ENV.funcs.find(e.list[0].atom);
     if (fnIter != ENV.funcs.end()) {
       return fnIter->second->apply(e.tail());
     }
-    //std::cout << "ERROR: unkonwn operator: " << e.list[0].atom << std::endl;
     return parse("(badexpr unknown-operator-" + e.list[0].atom +")");
+  } else {
+    return parse("(badexpr operator-not-atom-or-lambda)");
   }
-  return e;
 }
 
 void printEnv() {
@@ -442,10 +458,10 @@ int main() {
   while (true) {
     std::cout << ">>> ";
     std::getline(std::cin, code);
-    if (code == "exit") {
+    Expr e = parse(code);
+    if (e == EXIT_FUNC) {
       break;
     }
-    Expr e = parse(code);
     //std::cout << "parsed: " << e.toStr() << std::endl;
     Expr val = eval(e);
     std::cout << val.toStr() << std::endl;

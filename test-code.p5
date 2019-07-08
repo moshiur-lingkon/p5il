@@ -1,0 +1,8 @@
+(+ 1 3 2)
+(def defn (lambda (name params expr) (def name (lambda params expr))))
+(defn filter (list f) (if (eq? list ()) () (if (f (head list)) (cons (head list) (filter (tail list) f)) (filter (tail list) f))) )
+(filter (quote (1 2 3 1 2 1 1 2)) (\ (x) (or (eq? x 1) (eq? x 3))))
+(exit)
+(defn map (list f) (if (eq? list ()) () (cons (f (head list)) (map (tail list) f))))
+(map (quote (2 3 4)) (\ (x) (+ x x x)))
+(exit)
