@@ -24,10 +24,8 @@ public:
   }
 
   Expr& operator = (const Expr& other) {
-    std::string tmpStr = other.atom;
-    atom = tmpStr;
-    std::vector<Expr> tmpVec = other.list;
-    list = tmpVec;
+    atom = other.atom;
+    list = other.list;
     return *this;
   }
 
@@ -160,9 +158,6 @@ Expr parse(std::string code) {
     return parse("(badexpr multiple-atoms)");
   }
   res = res.list.size() > 0 ? res.list[0] : Expr();
-  if (res.isBadExpr()) {
-    std::cout << "===> " << code << "\n";
-  }
   return res;
 }
 
@@ -368,8 +363,8 @@ bool isLambda(Expr e) {
     (e.list[0].atom == "lambda" || e.list[0].atom == "\\") && !e.list[1].isAtom();
 }
 
+
 Expr eval(Expr e) {
-  //std::cout<<"=> " << e.toStr()<<"\n";
   if (e.isAtom()) {
     auto it = ENV.defs.find(e.atom);
     if (it != ENV.defs.end()) {
@@ -429,6 +424,9 @@ Expr eval(Expr e) {
   if (e.list[0].isAtom()) {
     for (size_t i = 1; i < e.list.size(); ++i) {
       e.list[i] = eval(e.list[i]);
+      if (e.list[i].isBadExpr()) {
+        return e.list[i];
+      }
     }
     auto fnIter = ENV.funcs.find(e.list[0].atom);
     if (fnIter != ENV.funcs.end()) {
@@ -454,18 +452,24 @@ void printEnv() {
 
 int main() {
   loadPrimitives();
-  std::string code;
   while (true) {
+    std::string code;
     std::cout << ">>> ";
     std::getline(std::cin, code);
     Expr e = parse(code);
+    while (e.isBadExpr()) {
+      std::string morelines;
+      std::getline(std::cin, morelines);
+      code += " " + morelines;
+      e = parse(code);
+    }
     if (e == EXIT_FUNC) {
       break;
     }
     //std::cout << "parsed: " << e.toStr() << std::endl;
     Expr val = eval(e);
-    std::cout << val.toStr() << std::endl;
-    printEnv();
+    std::cout << "= " << val.toStr() << std::endl;
+    //printEnv();
   }
   return 0;
 }
