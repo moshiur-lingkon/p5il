@@ -394,7 +394,7 @@ Expr eval(Expr e) {
     if (!e.list[1].isAtom()) {
       return parse("(badexpr def-arg-should-be-atom)");
     }
-    ENV.defs[e.list[1].atom] = e.list[2];
+    ENV.defs[e.list[1].atom] = eval(e.list[2]);
     return Expr();
   }
   if (e.list[0].atom == "quote") {

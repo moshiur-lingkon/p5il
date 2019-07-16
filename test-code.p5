@@ -1,16 +1,19 @@
 (def defn
   (lambda (name params expr)
     (def name (lambda params expr))))
+(defn f-inc-by-n (n) (lambda (x) (+ x n)))
+(def f-5 (f-inc-by-n 5))
+(f-5 3)
+f-5
 (defn range (n)
   (if (eq? n 0) () (cons n (range (+ n -1)))))
 range
-(exit)
 (range 5)
 (defn reduce (list f)
   (if (eq? (tail list) ()) (head list)
     (if (eq? (tail (tail list)) ()) (f (head list) (head (tail list)))
       (f (head list) (reduce (tail list) f)))))
-(reduce (range 100) +)
+(reduce (range 10) +)
 (exit)
 (defn filter (list f)
   (if (eq? list ()) ()
