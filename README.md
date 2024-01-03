@@ -1,1 +1,1 @@
-# Writing my own toy lisp (incomplete..)
+# Writing my own toy lisp (incomplete)
